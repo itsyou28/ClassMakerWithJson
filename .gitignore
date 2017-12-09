@@ -45,3 +45,5 @@ Assets/UnityVS*
 Assets/BuildData/localbuilddata.bytes*
 
 /ScreenShot*
+
+.vs
