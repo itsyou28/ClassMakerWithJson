@@ -22,8 +22,6 @@ public class ClassMaker : EditorWindow
     AssemblyName assemblyName;
     AssemblyBuilder assemblyBuilder;
 
-    string fieldName = "";
-
     private void Awake()
     {
         InitializeAssembly();
@@ -76,10 +74,7 @@ public class ClassMaker : EditorWindow
 
             try
             {
-                TypeBuilder dataBuilder = moduleBuilder.DefineType(classname, TypeAttributes.Public);
-
-                fieldName = "";
-                CreateClass(ref reader, ref dataBuilder, classname);
+                TypeBuilder dataBuilder = CreateClass(ref reader, classname);
 
                 dataBuilder.CreateType();
 
@@ -106,80 +101,98 @@ public class ClassMaker : EditorWindow
         jsonStr = EditorGUILayout.TextArea(jsonStr, GUILayout.ExpandWidth(true), GUILayout.ExpandHeight(true));
     }
 
+
     /// <summary>
-    /// Token을 분석해 재귀호출구조로 
+    /// Token을 분석해 Generic type 일 경우 필드를 생성하고 ObjectStart 일 경우 재귀호출을 통해 클래스를 생성한다. 
     /// json을 ToObject<T>() 형태로 파싱될 수 있도록 자동으로 클래스를 생성한다. 
     /// </summary>
     /// <param name="_reader"></param>
-    /// <param name="_builder"></param>
-    /// <param name="className"></param>
-    void CreateClass(ref JsonReader _reader, ref TypeBuilder _builder, string className, bool isMakeArr = false)
+    /// <param name="_className"></param>
+    TypeBuilder CreateClass(ref JsonReader _reader, string _className)
     {
+        TypeBuilder _builder = moduleBuilder.DefineType(_className, TypeAttributes.Public);
+        Debug.LogWarning("Define New Type : " + _builder.Name);
+
+        JsonToken curToken = JsonToken.Null;
+        JsonToken beforeToken = JsonToken.Null;
+        string propertyName = "";
+
         while (_reader.Read())
         {
-            Debug.Log(_reader.Token + " // " + _reader.Value);
-            switch (_reader.Token)
+            beforeToken = curToken;
+            curToken = _reader.Token;
+
+            Debug.Log("before token : " + beforeToken  +"        READ " + _reader.Token + " // " + _reader.Value);
+
+            switch (curToken)
             {
-                case JsonToken.ArrayStart:
-                    string newArrClassName = className + "_" + fieldName;
-
-                    Debug.LogWarning("ArrayStart : " + newArrClassName);
-
-                    TypeBuilder newArrBuilder = moduleBuilder.DefineType(newArrClassName, TypeAttributes.Public);
-
-                    string arrFieldname = fieldName;
-                    fieldName = "";
-
-                    CreateClass(ref _reader, ref newArrBuilder, newArrClassName, true);
-
-                    Type newType = newArrBuilder.CreateType();
-                    _builder.DefineField(arrFieldname, newType.MakeArrayType(), FieldAttributes.Public);
-                    Debug.Log(className + " Define Array Field : " + arrFieldname);
+                case JsonToken.ArrayStart://'['
+                    Debug.Log("ArrayStart " );
                     break;
-                case JsonToken.ArrayEnd:
-                    Debug.LogWarning("ArrayEnd : " + className);
-                    return;
-                case JsonToken.ObjectStart:
-                    if (fieldName == "")
+                case JsonToken.ArrayEnd://']'
+                    Debug.Log("ArrayEnd ");
+                    break;
+                case JsonToken.ObjectStart://'{'
+                    if (beforeToken == JsonToken.Null)
                         break;
-                    string objectFieldName = fieldName;
-                    string newClassName = className + "_" + fieldName;
 
-                    Debug.LogWarning("ObjectStart : " + newClassName);
+                    Debug.Log("ObjectStart ");
                     
-                    TypeBuilder newObjectBuilder = moduleBuilder.DefineType(newClassName, TypeAttributes.Public);
+                    string objectFieldName = propertyName;
+                    string newClassName = _className + "_" + propertyName;
+                    
+                    //새타입의 필드 정의를 위한 재귀호출
+                    TypeBuilder newObjectBuilder = CreateClass(ref _reader, newClassName);
 
-                    CreateClass(ref _reader, ref newObjectBuilder, newClassName);
-                    _builder.DefineField(objectFieldName, newObjectBuilder.CreateType(), FieldAttributes.Public);
+                    //정의된 타입으로 현재 클래스의 멤버 변수 생성. 직전 토큰이 ArrayStart 였을 경우 배열 타입으로 생성
+                    if (beforeToken == JsonToken.ArrayStart)
+                    {
+                        Type arrType = newObjectBuilder.CreateType();
+                        _builder.DefineField(objectFieldName, arrType.MakeArrayType(), FieldAttributes.Public);
+                        Debug.LogWarning("Define Array Field // " + newObjectBuilder.Name + " // " + _builder.Name + "." + objectFieldName + "[]");
+                    }
+                    else
+                    {
+                        _builder.DefineField(objectFieldName, newObjectBuilder.CreateType(), FieldAttributes.Public);
+                        Debug.LogWarning("Define Field // " + newObjectBuilder.Name + " // " + _builder.Name + "." + objectFieldName);
+                    }
+
                     break;
-                case JsonToken.ObjectEnd:
-                    if (isMakeArr)
-                        break;
-                    Debug.LogWarning("ObjectEnd : " + className);
-                    return;
-
+                case JsonToken.ObjectEnd://'}'
+                    Debug.LogWarning("ObjectEnd : " + _className);
+                    return _builder;
                 case JsonToken.PropertyName:
-                    fieldName = _reader.Value.ToString();
+                    propertyName = _reader.Value.ToString();
                     break;
                 case JsonToken.Int:
-                    _builder.DefineField(fieldName,
-                                    typeof(int), FieldAttributes.Public);
+                    if (beforeToken == JsonToken.ArrayStart)
+                        _builder.DefineField(propertyName, typeof(int).MakeArrayType(), FieldAttributes.Public);
+                    else
+                        _builder.DefineField(propertyName, typeof(int), FieldAttributes.Public);
                     break;
                 case JsonToken.Double:
-                    _builder.DefineField(fieldName,
-                                    typeof(double), FieldAttributes.Public);
+                    if (beforeToken == JsonToken.ArrayStart)
+                        _builder.DefineField(propertyName, typeof(double).MakeArrayType(), FieldAttributes.Public);
+                    else
+                        _builder.DefineField(propertyName, typeof(double), FieldAttributes.Public);
                     break;
                 case JsonToken.String:
-                    _builder.DefineField(fieldName,
-                                    typeof(String), FieldAttributes.Public);
+                    if (beforeToken == JsonToken.ArrayStart)
+                        _builder.DefineField(propertyName, typeof(String).MakeArrayType(), FieldAttributes.Public);
+                    else
+                        _builder.DefineField(propertyName, typeof(String), FieldAttributes.Public);
                     break;
                 case JsonToken.Long:
-                    _builder.DefineField(fieldName,
-                                    typeof(long), FieldAttributes.Public);
+                    if (beforeToken == JsonToken.ArrayStart)
+                        _builder.DefineField(propertyName, typeof(long).MakeArrayType(), FieldAttributes.Public);
+                    else
+                        _builder.DefineField(propertyName, typeof(long), FieldAttributes.Public);
                     break;
                 case JsonToken.Boolean:
-                    _builder.DefineField(fieldName,
-                                    typeof(Boolean), FieldAttributes.Public);
+                    if (beforeToken == JsonToken.ArrayStart)
+                        _builder.DefineField(propertyName, typeof(Boolean).MakeArrayType(), FieldAttributes.Public);
+                    else
+                        _builder.DefineField(propertyName, typeof(Boolean), FieldAttributes.Public);
                     break;
             }
 
@@ -190,9 +203,14 @@ public class ClassMaker : EditorWindow
                 case JsonToken.String:
                 case JsonToken.Long:
                 case JsonToken.Boolean:
-                    Debug.Log(className + " // Create Field!! // " + _reader.Token + " // " + fieldName);
+                    if(beforeToken == JsonToken.ArrayStart)
+                        Debug.LogWarning("Create Array Field // " + _builder.Name + "." + propertyName + "[] // " + _reader.Token + " // " + _reader.Value);
+                    else
+                        Debug.LogWarning("Define Field // " + _builder.Name + "." + propertyName + " // " + _reader.Token + " // " + _reader.Value );
                     break;
             }
         }
+
+        return _builder;
     }
 }
