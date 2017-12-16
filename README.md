@@ -1,5 +1,12 @@
 # ClassMakerWithJson
-리플렉션을 이용해 Json 데이터를 파싱할 수 있는 데이터 클래스를 자동으로 생성한다. 
+리플렉션을 이용해 입력한 json 데이터와 매칭되는 클래스를 정의한 dll을 생성한다.
+
+# 실행방법
+1. Tools -> ClassMaker
+2. 텍스트 입력단에 json 데이터를 입력
+3. Create 버튼 클릭
+4. Assets/Plugins/[SampleName].dll 파일 생성 확인
+5. 솔루션 참조 내역에서 AutoClass/SampleName이 확인되면 성공
 
 # Json example
 
